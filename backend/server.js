@@ -53,8 +53,8 @@ app.use(express.static(path.join(__dirname, '../frontend/dist'), {
 }));
 
 app.use((req, res, next) => {
-  console.log("Fallback middleware hit for path:", req.path);
-  if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/assets')) {
+  // Only serve index.html for navigation routes, not for static files (e.g. .png, .ico, .css)
+  if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.includes('.')) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.resolve(__dirname, '../frontend/dist', 'index.html'));
   } else {
