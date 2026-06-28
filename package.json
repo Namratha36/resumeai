@@ -1,0 +1,13 @@
+{
+  "name": "ats-resume-builder",
+  "version": "1.0.0",
+  "description": "ATS Resume Builder Full Stack Application",
+  "scripts": {
+    "start": "cd backend && node server.js",
+    "build": "npm --prefix backend install && npm --prefix frontend install && npm --prefix frontend run build",
+    "dev": "concurrently \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\""
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
