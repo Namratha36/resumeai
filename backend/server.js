@@ -11,11 +11,19 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('__dirname:', __dirname);
+console.log('Static path:', path.join(__dirname, '../frontend/dist'));
+
 dotenv.config();
 
 const app = express();
 
 // Middleware
+app.use((req, res, next) => {
+  console.log("INCOMING REQUEST:", req.method, req.path);
+  next();
+});
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -35,18 +43,24 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'Server is running' });
 });
 
-// Serve static frontend in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../frontend/dist')));
-  
-  app.use((req, res, next) => {
-    if (req.method === 'GET' && !req.path.startsWith('/api')) {
-      res.sendFile(path.resolve(__dirname, '../frontend/dist', 'index.html'));
-    } else {
-      next();
+// Serve static frontend
+app.use(express.static(path.join(__dirname, '../frontend/dist'), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
-  });
-}
+  }
+}));
+
+app.use((req, res, next) => {
+  console.log("Fallback middleware hit for path:", req.path);
+  if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/assets')) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(path.resolve(__dirname, '../frontend/dist', 'index.html'));
+  } else {
+    next();
+  }
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
