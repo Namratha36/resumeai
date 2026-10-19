@@ -1,22 +1,44 @@
 import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
+import { UserCheck } from 'lucide-react';
+import toast from 'react-hot-toast';
 import './Auth.css';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const { login } = useContext(AuthContext);
+  const [loading, setLoading] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
+  const { login, loginAsGuest } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setLoading(true);
     try {
       await login(email, password);
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    setError('');
+    setGuestLoading(true);
+    try {
+      await loginAsGuest();
+      toast.success('Welcome! Exploring as Guest.');
+      navigate('/dashboard');
+    } catch (err) {
+      setError('Unable to enter as guest');
+    } finally {
+      setGuestLoading(false);
     }
   };
 
@@ -49,8 +71,25 @@ const Login = () => {
               required 
             />
           </div>
-          <button type="submit" className="btn btn-primary auth-submit">Login</button>
+          <button type="submit" className="btn btn-primary auth-submit" disabled={loading}>
+            {loading ? 'Logging in...' : 'Login'}
+          </button>
         </form>
+
+        <div className="auth-divider">
+          <span>OR</span>
+        </div>
+
+        <button 
+          type="button" 
+          onClick={handleGuestLogin} 
+          className="btn btn-guest"
+          disabled={guestLoading}
+        >
+          <UserCheck size={18} />
+          {guestLoading ? 'Connecting as Guest...' : 'Continue as Guest'}
+        </button>
+
         <p className="auth-switch">
           Don't have an account? <Link to="/register">Sign up</Link>
         </p>

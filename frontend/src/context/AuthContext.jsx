@@ -11,8 +11,14 @@ export const AuthProvider = ({ children }) => {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
     if (token && storedUser) {
-      setUser(JSON.parse(storedUser));
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      try {
+        setUser(JSON.parse(storedUser));
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      } catch (e) {
+        console.error('Error parsing stored user:', e);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
     }
     setLoading(false);
   }, []);
@@ -33,6 +39,32 @@ export const AuthProvider = ({ children }) => {
     axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
   };
 
+  const loginAsGuest = async () => {
+    try {
+      const res = await axios.post('/api/auth/guest');
+      localStorage.setItem('token', res.data.token);
+      localStorage.setItem('user', JSON.stringify(res.data.user));
+      setUser(res.data.user);
+      axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
+      return res.data.user;
+    } catch (err) {
+      console.warn('Backend guest auth failed, falling back to local guest session', err);
+      // Instant client-side fallback guest session
+      const guestUser = {
+        id: '000000000000000000000000',
+        name: 'Guest User',
+        email: 'guest@resumeai.demo',
+        isGuest: true
+      };
+      const guestToken = 'guest_token_' + Date.now();
+      localStorage.setItem('token', guestToken);
+      localStorage.setItem('user', JSON.stringify(guestUser));
+      setUser(guestUser);
+      axios.defaults.headers.common['Authorization'] = `Bearer ${guestToken}`;
+      return guestUser;
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -41,7 +73,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, register, loginAsGuest, logout, loading }}>
       {!loading && children}
     </AuthContext.Provider>
   );

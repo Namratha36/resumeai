@@ -1,9 +1,18 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { FileText, Cpu, CheckCircle } from 'lucide-react';
+import React, { useContext } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { FileText, Cpu, CheckCircle, UserCheck } from 'lucide-react';
+import { AuthContext } from '../context/AuthContext';
 import './Home.css';
 
 const Home = () => {
+  const { user, loginAsGuest } = useContext(AuthContext);
+  const navigate = useNavigate();
+
+  const handleGuestClick = async () => {
+    await loginAsGuest();
+    navigate('/dashboard');
+  };
+
   return (
     <div className="home-container animate-fade-in">
       <header className="hero">
@@ -12,8 +21,21 @@ const Home = () => {
           Beat the Applicant Tracking Systems (ATS) and land your dream job with intelligent resume analysis, automated suggestions, and professional PDF generation.
         </p>
         <div className="hero-cta">
-          <Link to="/register" className="btn btn-primary btn-lg">Get Started Free</Link>
-          <Link to="/login" className="btn btn-secondary btn-lg">Login</Link>
+          {user ? (
+            <Link to="/dashboard" className="btn btn-primary btn-lg">Go to Dashboard</Link>
+          ) : (
+            <>
+              <Link to="/register" className="btn btn-primary btn-lg">Get Started Free</Link>
+              <button 
+                type="button" 
+                onClick={handleGuestClick} 
+                className="btn btn-secondary btn-lg" 
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+              >
+                <UserCheck size={18} /> Try as Guest
+              </button>
+            </>
+          )}
         </div>
       </header>
       

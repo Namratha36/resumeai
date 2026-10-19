@@ -1,6 +1,8 @@
 import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
+import { UserCheck } from 'lucide-react';
+import toast from 'react-hot-toast';
 import './Auth.css';
 
 const Register = () => {
@@ -8,16 +10,36 @@ const Register = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const { register } = useContext(AuthContext);
+  const [loading, setLoading] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
+  const { register, loginAsGuest } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setLoading(true);
     try {
       await register(name, email, password);
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    setError('');
+    setGuestLoading(true);
+    try {
+      await loginAsGuest();
+      toast.success('Welcome! Exploring as Guest.');
+      navigate('/dashboard');
+    } catch (err) {
+      setError('Unable to enter as guest');
+    } finally {
+      setGuestLoading(false);
     }
   };
 
@@ -60,8 +82,25 @@ const Register = () => {
               required 
             />
           </div>
-          <button type="submit" className="btn btn-primary auth-submit">Sign Up</button>
+          <button type="submit" className="btn btn-primary auth-submit" disabled={loading}>
+            {loading ? 'Creating Account...' : 'Sign Up'}
+          </button>
         </form>
+
+        <div className="auth-divider">
+          <span>OR</span>
+        </div>
+
+        <button 
+          type="button" 
+          onClick={handleGuestLogin} 
+          className="btn btn-guest"
+          disabled={guestLoading}
+        >
+          <UserCheck size={18} />
+          {guestLoading ? 'Connecting as Guest...' : 'Continue as Guest'}
+        </button>
+
         <p className="auth-switch">
           Already have an account? <Link to="/login">Login</Link>
         </p>
