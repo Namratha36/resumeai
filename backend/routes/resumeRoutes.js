@@ -6,9 +6,7 @@ const pdfParse = require('pdf-parse');
 import mammoth from 'mammoth';
 import Resume from '../models/Resume.js';
 import authMiddleware from '../middleware/authMiddleware.js';
-import puppeteer from 'puppeteer';
-import fs from 'fs';
-import path from 'path';
+import PDFDocument from 'pdfkit';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -101,88 +99,103 @@ router.post('/upload', authMiddleware, upload.single('resumeFile'), async (req, 
   }
 });
 
+// Helper function to generate ATS-friendly PDF using PDFKit
+const generateResumePDF = (resume) => {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    const chunks = [];
+
+    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    // Full Name
+    doc.fontSize(22).font('Helvetica-Bold').fillColor('#0f172a').text(resume.personalInfo?.fullName || 'Untitled Resume', { align: 'center' });
+
+    // Contact Info
+    const contactParts = [
+      resume.personalInfo?.email,
+      resume.personalInfo?.phone,
+      resume.personalInfo?.location
+    ].filter(Boolean);
+
+    if (contactParts.length > 0) {
+      doc.moveDown(0.2);
+      doc.fontSize(9.5).font('Helvetica').fillColor('#475569').text(contactParts.join('  |  '), { align: 'center' });
+    }
+
+    doc.moveDown(0.5);
+    doc.strokeColor('#cbd5e1').lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    const addSectionHeader = (title) => {
+      doc.moveDown(0.6);
+      doc.fontSize(11).font('Helvetica-Bold').fillColor('#1e40af').text(title.toUpperCase());
+      doc.strokeColor('#e2e8f0').lineWidth(0.5).moveTo(40, doc.y + 2).lineTo(555, doc.y + 2).stroke();
+      doc.moveDown(0.4);
+    };
+
+    // Summary
+    if (resume.personalInfo?.summary) {
+      addSectionHeader('Professional Summary');
+      doc.fontSize(9.5).font('Helvetica').fillColor('#334155').text(resume.personalInfo.summary, { lineGap: 2 });
+    }
+
+    // Experience
+    if (resume.experience && resume.experience.length > 0) {
+      addSectionHeader('Work Experience');
+      resume.experience.forEach((exp) => {
+        const startY = doc.y;
+        doc.fontSize(10.5).font('Helvetica-Bold').fillColor('#0f172a').text(exp.position || 'Position', 40, startY, { width: 350 });
+        const dateRange = [exp.startDate, exp.endDate].filter(Boolean).join(' - ');
+        if (dateRange) {
+          doc.fontSize(9).font('Helvetica').fillColor('#64748b').text(dateRange, 400, startY, { width: 155, align: 'right' });
+        }
+        if (exp.company) {
+          doc.fontSize(9.5).font('Helvetica-Oblique').fillColor('#475569').text(exp.company, 40);
+        }
+        if (exp.description) {
+          doc.moveDown(0.2);
+          doc.fontSize(9).font('Helvetica').fillColor('#334155').text(exp.description, 40, doc.y, { lineGap: 2, width: 515 });
+        }
+        doc.moveDown(0.4);
+      });
+    }
+
+    // Education
+    if (resume.education && resume.education.length > 0) {
+      addSectionHeader('Education');
+      resume.education.forEach((edu) => {
+        const startY = doc.y;
+        doc.fontSize(10.5).font('Helvetica-Bold').fillColor('#0f172a').text(edu.degree || 'Degree', 40, startY, { width: 350 });
+        const dateRange = [edu.startDate, edu.endDate].filter(Boolean).join(' - ');
+        if (dateRange) {
+          doc.fontSize(9).font('Helvetica').fillColor('#64748b').text(dateRange, 400, startY, { width: 155, align: 'right' });
+        }
+        if (edu.institution) {
+          doc.fontSize(9.5).font('Helvetica-Oblique').fillColor('#475569').text(edu.institution, 40);
+        }
+        doc.moveDown(0.4);
+      });
+    }
+
+    // Skills
+    if (resume.skills && resume.skills.length > 0) {
+      addSectionHeader('Skills');
+      doc.fontSize(9.5).font('Helvetica').fillColor('#334155').text(resume.skills.join(', '), { lineGap: 2, width: 515 });
+    }
+
+    doc.end();
+  });
+};
+
 // Generate PDF
 router.get('/:id/pdf', authMiddleware, async (req, res) => {
   try {
     const resume = await Resume.findOne({ _id: req.params.id, user: req.user });
     if (!resume) return res.status(404).json({ message: 'Resume not found' });
 
-    // Generate HTML for the PDF
-    const htmlContent = `
-      <html>
-        <head>
-          <style>
-            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; margin: 0; padding: 40px; }
-            h1 { color: #222; margin-bottom: 5px; font-size: 24px; }
-            h2 { color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-top: 20px; font-size: 18px; }
-            h3 { margin-bottom: 5px; font-size: 16px; color: #333; }
-            .contact-info { margin-bottom: 20px; font-size: 14px; color: #555; }
-            .section { margin-bottom: 20px; }
-            .item { margin-bottom: 15px; }
-            .item-header { display: flex; justify-content: space-between; font-weight: bold; }
-            .item-sub { font-style: italic; color: #666; margin-bottom: 5px; font-size: 14px; }
-            ul { margin: 0; padding-left: 20px; }
-            li { margin-bottom: 5px; font-size: 14px; }
-            p { font-size: 14px; margin: 0 0 10px 0; }
-          </style>
-        </head>
-        <body>
-          <h1>${resume.personalInfo?.fullName || 'Your Name'}</h1>
-          <div class="contact-info">
-            ${resume.personalInfo?.email ? resume.personalInfo.email + ' | ' : ''}
-            ${resume.personalInfo?.phone ? resume.personalInfo.phone + ' | ' : ''}
-            ${resume.personalInfo?.location || ''}
-          </div>
-          
-          ${resume.personalInfo?.summary ? `
-          <div class="section">
-            <h2>Professional Summary</h2>
-            <p>${resume.personalInfo.summary}</p>
-          </div>` : ''}
-
-          ${resume.experience && resume.experience.length > 0 ? `
-          <div class="section">
-            <h2>Experience</h2>
-            ${resume.experience.map(exp => `
-              <div class="item">
-                <div class="item-header">
-                  <span>${exp.position}</span>
-                  <span>${exp.startDate} - ${exp.endDate}</span>
-                </div>
-                <div class="item-sub">${exp.company}</div>
-                <p>${exp.description}</p>
-              </div>
-            `).join('')}
-          </div>` : ''}
-
-          ${resume.education && resume.education.length > 0 ? `
-          <div class="section">
-            <h2>Education</h2>
-            ${resume.education.map(edu => `
-              <div class="item">
-                <div class="item-header">
-                  <span>${edu.degree}</span>
-                  <span>${edu.startDate} - ${edu.endDate}</span>
-                </div>
-                <div class="item-sub">${edu.institution}</div>
-              </div>
-            `).join('')}
-          </div>` : ''}
-
-          ${resume.skills && resume.skills.length > 0 ? `
-          <div class="section">
-            <h2>Skills</h2>
-            <p>${resume.skills.join(', ')}</p>
-          </div>` : ''}
-        </body>
-      </html>
-    `;
-
-    const browser = await puppeteer.launch({ headless: 'new' });
-    const page = await browser.newPage();
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-    const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
-    await browser.close();
+    const pdfBuffer = await generateResumePDF(resume);
 
     res.set({
       'Content-Type': 'application/pdf',
@@ -190,7 +203,6 @@ router.get('/:id/pdf', authMiddleware, async (req, res) => {
       'Content-Length': pdfBuffer.length
     });
     res.send(pdfBuffer);
-
   } catch (error) {
     console.error('Error generating PDF:', error);
     res.status(500).json({ message: 'Error generating PDF' });
